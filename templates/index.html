@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div id="score-container">
+        <div id="left-score">0</div>
+        <div id="right-score">0</div>
+    </div>
+    
+    <canvas id="gameCanvas"></canvas>
+    
+    <button id="startButton" class="start-button">START GAME</button>
+    <div id="gameOverMessage" class="game-over-message"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const leftScoreSpan = document.getElementById('left-score');
+        const rightScoreSpan = document.getElementById('right-score');
+        const startButton = document.getElementById('startButton');
+        const gameOverMessage = document.getElementById('gameOverMessage');
+
+        // Set canvas to full screen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const socket = io('http://127.0.0.1:5000');
+
+        let gameState = {
+            ball: { x: 0, y: 0, dx: 0, dy: 0 },
+            player_paddle: { y: 0 },
+            ai_paddle: { y: 0 },
+            player_score: 0,
+            ai_score: 0,
+            game_started: false,
+            game_over: false
+        };
+
+        function drawGame() {
+            // Clear canvas with solid black
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const scaleX = canvas.width / 1200;
+            const scaleY = canvas.height / 700;
+            const PADDLE_WIDTH = 15 * scaleX;
+            const PADDLE_HEIGHT = 100 * scaleY;
+            const BALL_RADIUS = 10 * Math.min(scaleX, scaleY);
+
+            // Draw paddles with clean rectangles
+            ctx.fillStyle = '#FFFFFF';
+            // Left paddle
+            ctx.fillRect(0, gameState.player_paddle.y * scaleY, PADDLE_WIDTH, PADDLE_HEIGHT);
+            // Right paddle  
+            ctx.fillRect(canvas.width - PADDLE_WIDTH, gameState.ai_paddle.y * scaleY, PADDLE_WIDTH, PADDLE_HEIGHT);
+
+            // Draw ball as clean circle
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(gameState.ball.x * scaleX, gameState.ball.y * scaleY, BALL_RADIUS, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Update scores with clean display
+            leftScoreSpan.textContent = gameState.player_score;
+            rightScoreSpan.textContent = gameState.ai_score;
+
+            // Handle game states
+            if (gameState.game_over) {
+                gameOverMessage.style.display = 'block';
+                if (gameState.player_score >= 5) {
+                    gameOverMessage.textContent = "LEFT WINS";
+                } else {
+                    gameOverMessage.textContent = "RIGHT WINS";
+                }
+                startButton.textContent = "PLAY AGAIN";
+                startButton.style.display = 'block';
+            } else if (!gameState.game_started) {
+                gameOverMessage.style.display = 'none';
+                startButton.style.display = 'block';
+                startButton.textContent = "START GAME";
+            } else {
+                gameOverMessage.style.display = 'none';
+                startButton.style.display = 'none';
+            }
+        }
+
+        socket.on('game_state', (data) => {
+            gameState = data;
+        });
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        startButton.addEventListener('click', () => {
+            socket.emit('start_game');
+        });
+
+        function gameLoop() {
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initial draw
+        gameLoop();
+    </script>
+</body>
+</html>
