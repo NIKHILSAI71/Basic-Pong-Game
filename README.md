@@ -1,30 +1,30 @@
-# AI-Controlled Pong Game
+# Adaptive Pong Game
 
-An exciting AI vs AI Pong game built with Python (Flask + SocketIO) for the backend AI logic and HTML/CSS/JavaScript for the frontend UI.
+A simple, responsive Pong game built with Flask, Socket.IO, and HTML5 Canvas that adapts to any screen size.
 
 ## Features
 
-- Two AI players competing against each other
-- Real-time game updates via WebSocket
-- Beautiful gradient UI with glowing effects
-- Responsive design for different screen sizes
-- 50 FPS smooth gameplay
-- First to 5 points wins
+- **Fully Responsive**: Adapts to any screen size from mobile phones to large desktops
+- **Touch Support**: Touch controls for mobile devices
+- **Real-time Gameplay**: Uses WebSockets for smooth, real-time gameplay
+- **AI Opponent**: Simple AI that adapts to ball movement
+- **Clean Design**: Minimalist black and white aesthetic
+- **Cross-Platform**: Works on all modern browsers and devices
 
 ## Project Structure
 
 ```
 Basic-Pong-Game/
 │
-├── app.py              # Main Python server with AI logic
+├── app.py              # Flask server with game logic
 ├── requirements.txt    # Python dependencies
 ├── README.md          # This file
 │
 ├── templates/
-│   └── index.html     # HTML template
+│   └── index.html     # HTML template with responsive canvas
 │
 └── static/
-    └── style.css      # CSS styling
+    └── style.css      # Responsive CSS styling
 ```
 
 ## Installation & Setup
@@ -44,25 +44,51 @@ Basic-Pong-Game/
    http://127.0.0.1:5000
    ```
 
-4. **Click "Start Game" to watch the AI players compete!**
+4. **Click "START GAME" to begin playing!**
+
+## Controls
+
+- **Desktop**: Use Arrow Keys (↑↓) or W/S keys to control the right paddle
+- **Mobile**: Touch and drag on the game area to control the paddle
+- **Start Game**: Click "START GAME" button
+
+## Game Rules
+
+- First player to reach 5 points wins
+- Left paddle is controlled by AI
+- Right paddle is controlled by the player
+- Ball bounces off paddles and top/bottom walls
+- Points scored when ball passes the opponent's paddle
 
 ## How It Works
 
 ### Backend (Python)
 - **Flask**: Web server framework
-- **Flask-SocketIO**: Real-time bidirectional communication
-- **AI Logic**: Simple "follow the ball" algorithm with slight differences between left and right AI
-- **Game Loop**: Runs at 50 FPS, updating ball physics and AI decisions
+- **Flask-SocketIO**: Real-time bidirectional communication with optimized timing
+- **Game Logic**: Improved collision detection with proper ball-paddle interaction
+- **Game Loop**: Optimized 60 FPS with delta timing to prevent lag
+- **AI**: Simple but responsive AI that follows the ball
 
 ### Frontend (HTML/CSS/JavaScript)
-- **Canvas**: Renders the game graphics
-- **Socket.IO**: Receives real-time game state updates
-- **Responsive Design**: Works on desktop and mobile devices
+- **Canvas**: Hardware-accelerated rendering with FPS throttling
+- **Socket.IO**: Throttled real-time updates to prevent lag
+- **Responsive Design**: Works perfectly on desktop and mobile devices
+- **Performance**: Optimized drawing loop with requestAnimationFrame
 
-### AI Strategy
-- **Left AI**: Slightly less responsive (80% speed) to create competitive gameplay
-- **Right AI**: More responsive and accurate
-- **Ball Physics**: Realistic collision detection with random variation after paddle hits
+### Key Features
+- **Lag-Free**: Optimized game loop and rendering for smooth gameplay
+- **Accurate Collision**: Improved ball-paddle collision detection
+- **Creator Credit**: Attribution preserved as requested
+- **Mobile Support**: Touch controls with proper throttling
+
+## Technical Improvements Made
+
+- Fixed ball-paddle collision detection with proper hit zones
+- Added FPS throttling to prevent lag on slower devices
+- Optimized Socket.IO communication with update limiting
+- Improved AI responsiveness and accuracy
+- Added proper creator attribution
+- Enhanced mobile touch controls with better sensitivity
 
 ## Game Rules
 

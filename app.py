@@ -1,104 +1,122 @@
-import math
-import random
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
+import random
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'pong_game_secret_key'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Game Constants
-GAME_WIDTH = 1200
-GAME_HEIGHT = 700
-PADDLE_WIDTH = 15
-PADDLE_HEIGHT = 100
-BALL_RADIUS = 10
-PADDLE_SPEED = 8
-BALL_SPEED_INITIAL = 6
-
-# Game State
+# Game state - clean and simple percentage-based coordinates
 game_state = {
-    'ball': {'x': GAME_WIDTH / 2, 'y': GAME_HEIGHT / 2, 'dx': BALL_SPEED_INITIAL, 'dy': BALL_SPEED_INITIAL},
-    'player_paddle': {'y': GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2},
-    'ai_paddle': {'y': GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2},
-    'player_score': 0,
-    'ai_score': 0,
+    'ball': {'x': 50, 'y': 50, 'dx': 0.8, 'dy': 0.5},
+    'left_paddle': {'y': 42.5, 'target_y': 42.5},
+    'right_paddle': {'y': 42.5, 'target_y': 42.5},
+    'left_score': 0,
+    'right_score': 0,
     'game_started': False,
-    'game_over': False
+    'game_over': False,
+    'paddle_speed': 2.0,
+    'ball_base_speed': 0.8,
+    'rally_count': 0,
+    'paddle_smoothing': 0.2
 }
 
 def reset_ball():
-    game_state['ball']['x'] = GAME_WIDTH / 2
-    game_state['ball']['y'] = GAME_HEIGHT / 2
-    game_state['ball']['dx'] = BALL_SPEED_INITIAL * (1 if random.random() > 0.5 else -1)
-    game_state['ball']['dy'] = BALL_SPEED_INITIAL * (1 if random.random() > 0.5 else -1)
+    """Reset ball to center with random direction"""
+    game_state['ball']['x'] = 50
+    game_state['ball']['y'] = 50 + random.uniform(-10, 10)  # Add slight vertical randomness
+    game_state['rally_count'] = 0
+    
+    # Set ball direction and speed
+    direction_x = 1 if random.random() > 0.5 else -1
+    direction_y = random.uniform(-0.5, 0.5)
+    
+    game_state['ball']['dx'] = game_state['ball_base_speed'] * direction_x
+    game_state['ball']['dy'] = direction_y
 
-def update_game_state():
+def update_game():
+    """Clean game update logic with proper physics"""
     if not game_state['game_started'] or game_state['game_over']:
         return
 
-    # Move Ball
+    # Smooth paddle interpolation
+    smoothing = game_state['paddle_smoothing']
+    game_state['left_paddle']['y'] += (game_state['left_paddle']['target_y'] - game_state['left_paddle']['y']) * smoothing
+    game_state['right_paddle']['y'] += (game_state['right_paddle']['target_y'] - game_state['right_paddle']['y']) * smoothing
+
+    # Move ball
     game_state['ball']['x'] += game_state['ball']['dx']
     game_state['ball']['y'] += game_state['ball']['dy']
 
     # Ball collision with top/bottom walls
-    if game_state['ball']['y'] - BALL_RADIUS <= 0:
-        game_state['ball']['y'] = BALL_RADIUS
-        game_state['ball']['dy'] *= -1
-    elif game_state['ball']['y'] + BALL_RADIUS >= GAME_HEIGHT:
-        game_state['ball']['y'] = GAME_HEIGHT - BALL_RADIUS
-        game_state['ball']['dy'] *= -1
+    if game_state['ball']['y'] <= 0 or game_state['ball']['y'] >= 100:
+        game_state['ball']['dy'] = -game_state['ball']['dy']
+        game_state['ball']['y'] = max(0, min(100, game_state['ball']['y']))
 
-    # Ball collision with paddles
-    # AI Paddle (right)
-    if (game_state['ball']['x'] + BALL_RADIUS >= GAME_WIDTH - PADDLE_WIDTH and
-            game_state['ball']['dx'] > 0 and
-            game_state['ball']['y'] >= game_state['ai_paddle']['y'] and
-            game_state['ball']['y'] <= game_state['ai_paddle']['y'] + PADDLE_HEIGHT):
-        game_state['ball']['x'] = GAME_WIDTH - PADDLE_WIDTH - BALL_RADIUS
-        game_state['ball']['dx'] *= -1.05  # Slightly increase speed
+    # Paddle dimensions
+    paddle_width = 2
+    paddle_height = 15
+    ball_x, ball_y = game_state['ball']['x'], game_state['ball']['y']
+    
+    # Left paddle collision (AI)
+    if (ball_x <= paddle_width and game_state['ball']['dx'] < 0 and
+        ball_y >= game_state['left_paddle']['y'] and 
+        ball_y <= game_state['left_paddle']['y'] + paddle_height):
+        
+        game_state['rally_count'] += 1
+        
+        # Simple speed increase (max 1.5x)
+        speed_mult = min(1.0 + (game_state['rally_count'] * 0.03), 1.5)
+        
+        # Reverse and increase speed
+        game_state['ball']['dx'] = game_state['ball_base_speed'] * speed_mult
+        game_state['ball']['x'] = paddle_width + 0.1  # Push ball away
+        
         # Add spin based on where ball hits paddle
-        hit_pos = (game_state['ball']['y'] - game_state['ai_paddle']['y']) / PADDLE_HEIGHT - 0.5
-        game_state['ball']['dy'] += hit_pos * 2
+        hit_pos = (ball_y - game_state['left_paddle']['y']) / paddle_height - 0.5
+        game_state['ball']['dy'] += hit_pos * 0.3
 
-    # Player Paddle (left - AI controlled)
-    if (game_state['ball']['x'] - BALL_RADIUS <= PADDLE_WIDTH and
-            game_state['ball']['dx'] < 0 and
-            game_state['ball']['y'] >= game_state['player_paddle']['y'] and
-            game_state['ball']['y'] <= game_state['player_paddle']['y'] + PADDLE_HEIGHT):
-        game_state['ball']['x'] = PADDLE_WIDTH + BALL_RADIUS
-        game_state['ball']['dx'] *= -1.05  # Slightly increase speed
+    # Right paddle collision (Player)
+    elif (ball_x >= 100 - paddle_width and game_state['ball']['dx'] > 0 and
+          ball_y >= game_state['right_paddle']['y'] and 
+          ball_y <= game_state['right_paddle']['y'] + paddle_height):
+        
+        game_state['rally_count'] += 1
+        
+        # Simple speed increase (max 1.5x)
+        speed_mult = min(1.0 + (game_state['rally_count'] * 0.03), 1.5)
+        
+        # Reverse and increase speed
+        game_state['ball']['dx'] = -game_state['ball_base_speed'] * speed_mult
+        game_state['ball']['x'] = 100 - paddle_width - 0.1  # Push ball away
+        
         # Add spin based on where ball hits paddle
-        hit_pos = (game_state['ball']['y'] - game_state['player_paddle']['y']) / PADDLE_HEIGHT - 0.5
-        game_state['ball']['dy'] += hit_pos * 2
+        hit_pos = (ball_y - game_state['right_paddle']['y']) / paddle_height - 0.5
+        game_state['ball']['dy'] += hit_pos * 0.3
 
-    # Score points
-    if game_state['ball']['x'] < 0:
-        game_state['ai_score'] += 1
+    # Limit vertical speed
+    if abs(game_state['ball']['dy']) > 1.2:
+        game_state['ball']['dy'] = 1.2 if game_state['ball']['dy'] > 0 else -1.2
+
+    # Scoring
+    if ball_x < -1:
+        game_state['right_score'] += 1
         reset_ball()
-    elif game_state['ball']['x'] > GAME_WIDTH:
-        game_state['player_score'] += 1
+    elif ball_x > 101:
+        game_state['left_score'] += 1
         reset_ball()
 
-    # Simple AI Logic to follow the ball
-    # Left Paddle
-    if game_state['player_paddle']['y'] + PADDLE_HEIGHT / 2 < game_state['ball']['y']:
-        game_state['player_paddle']['y'] += PADDLE_SPEED
-    elif game_state['player_paddle']['y'] + PADDLE_HEIGHT / 2 > game_state['ball']['y']:
-        game_state['player_paddle']['y'] -= PADDLE_SPEED
+    # AI paddle movement
+    paddle_center = game_state['left_paddle']['y'] + paddle_height/2
+    ball_target = ball_y + (game_state['ball']['dy'] * 10)  # Predict ball position
+    
+    if paddle_center < ball_target - 1:
+        game_state['left_paddle']['target_y'] = min(85, game_state['left_paddle']['target_y'] + 1.5)
+    elif paddle_center > ball_target + 1:
+        game_state['left_paddle']['target_y'] = max(0, game_state['left_paddle']['target_y'] - 1.5)
 
-    # Right Paddle
-    if game_state['ai_paddle']['y'] + PADDLE_HEIGHT / 2 < game_state['ball']['y']:
-        game_state['ai_paddle']['y'] += PADDLE_SPEED
-    elif game_state['ai_paddle']['y'] + PADDLE_HEIGHT / 2 > game_state['ball']['y']:
-        game_state['ai_paddle']['y'] -= PADDLE_SPEED
-
-    # Keep paddles on screen
-    game_state['player_paddle']['y'] = max(0, min(game_state['player_paddle']['y'], GAME_HEIGHT - PADDLE_HEIGHT))
-    game_state['ai_paddle']['y'] = max(0, min(game_state['ai_paddle']['y'], GAME_HEIGHT - PADDLE_HEIGHT))
-
-    # Check for game over (first to 5 points)
-    if game_state['player_score'] >= 5 or game_state['ai_score'] >= 5:
+    # Win condition
+    if game_state['left_score'] >= 5 or game_state['right_score'] >= 5:
         game_state['game_over'] = True
         game_state['game_started'] = False
 
@@ -107,30 +125,43 @@ def index():
     return render_template('index.html')
 
 @socketio.on('connect')
-def test_connect():
-    print('Client connected')
+def on_connect():
     emit('game_state', game_state)
 
 @socketio.on('start_game')
 def start_game():
-    if not game_state['game_started']:
-        game_state['game_started'] = True
-        game_state['game_over'] = False
-        game_state['player_score'] = 0
-        game_state['ai_score'] = 0
-        reset_ball()
-        
-        print("Game started with simple AI!")
-        socketio.start_background_task(target=game_loop)
+    game_state['game_started'] = True
+    game_state['game_over'] = False
+    game_state['left_score'] = 0
+    game_state['right_score'] = 0
+    game_state['left_paddle']['y'] = 42.5
+    game_state['right_paddle']['y'] = 42.5
+    game_state['left_paddle']['target_y'] = 42.5
+    game_state['right_paddle']['target_y'] = 42.5
+    reset_ball()
+    socketio.start_background_task(target=game_loop)
+
+@socketio.on('move_paddle')
+def move_paddle(data):
+    """Handle player paddle movement"""
+    if data['direction'] == 'up':
+        game_state['right_paddle']['target_y'] = max(0, game_state['right_paddle']['target_y'] - game_state['paddle_speed'])
+    elif data['direction'] == 'down':
+        game_state['right_paddle']['target_y'] = min(85, game_state['right_paddle']['target_y'] + game_state['paddle_speed'])
 
 def game_loop():
+    """Main game loop - 60 FPS"""
+    import time
+    frame_time = 1.0 / 60
+    last_time = time.time()
+    
     while game_state['game_started']:
-        update_game_state()
-        socketio.emit('game_state', game_state)
-        socketio.sleep(0.016)  # Update every 16ms (60 FPS)
+        current_time = time.time()
+        if current_time - last_time >= frame_time:
+            update_game()
+            socketio.emit('game_state', game_state)
+            last_time = current_time
+        socketio.sleep(0.01)
 
 if __name__ == '__main__':
-    print("Starting Simple AI Pong Game...")
-    print("AI will try to follow the ball")
-    print("Open your browser and go to: http://127.0.0.1:5000")
     socketio.run(app, debug=True, port=5000)

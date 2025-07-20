@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pong</title>
+    <title>Adaptive Pong Game</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -11,113 +11,277 @@
         <span>created by <a href="https://github.com/NIKHILSAI71" target="_blank">NIKHILSAI71</a></span>
         <img src="https://github.com/NIKHILSAI71.png" alt="NIKHILSAI71" class="profile-pic">
     </div>
-    
+
     <div id="score-container">
         <div id="left-score">0</div>
         <div id="right-score">0</div>
     </div>
     
+    <div id="mobile-instructions" class="mobile-instructions">
+        Touch and drag to move paddle
+    </div>
+    
     <canvas id="gameCanvas"></canvas>
     
     <button id="startButton" class="start-button">START GAME</button>
-    <div id="gameOverMessage" class="game-over-message"></div>
+    
+    <div id="gameOverPanel" class="game-over-message">
+        <div id="winnerText"></div>
+        <button id="restartButton" class="start-button">PLAY AGAIN</button>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const leftScoreSpan = document.getElementById('left-score');
-        const rightScoreSpan = document.getElementById('right-score');
+        const leftScore = document.getElementById('left-score');
+        const rightScore = document.getElementById('right-score');
         const startButton = document.getElementById('startButton');
-        const gameOverMessage = document.getElementById('gameOverMessage');
+        const restartButton = document.getElementById('restartButton');
+        const gameOverPanel = document.getElementById('gameOverPanel');
+        const winnerText = document.getElementById('winnerText');
+        const mobileInstructions = document.getElementById('mobile-instructions');
 
-        // Set canvas to full screen
+        // Detect if device is mobile/touch capable
+        const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        if (isMobile) {
+            mobileInstructions.style.display = 'block';
+        }
+
+        // Responsive canvas setup
         function resizeCanvas() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         }
+        
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        const socket = io('http://127.0.0.1:5000');
+        const socket = io();
+        let gameState = {};
+        let lastDrawTime = 0;
+        const targetFPS = 60;  // Back to smooth 60 FPS
+        const frameTime = 1000 / targetFPS;
 
-        let gameState = {
-            ball: { x: 0, y: 0, dx: 0, dy: 0 },
-            player_paddle: { y: 0 },
-            ai_paddle: { y: 0 },
-            player_score: 0,
-            ai_score: 0,
-            game_started: false,
-            game_over: false
-        };
+        // Convert percentage coordinates to screen coordinates
+        function toScreenX(percent) {
+            return (percent / 100) * canvas.width;
+        }
+        
+        function toScreenY(percent) {
+            return (percent / 100) * canvas.height;
+        }
 
-        function drawGame() {
-            // Clear canvas with solid black
+        function drawGame(currentTime) {
+            // Throttle drawing to target FPS
+            if (currentTime - lastDrawTime < frameTime) {
+                requestAnimationFrame(drawGame);
+                return;
+            }
+            lastDrawTime = currentTime;
+
+            // Clear canvas
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            const scaleX = canvas.width / 1200;
-            const scaleY = canvas.height / 700;
-            const PADDLE_WIDTH = 15 * scaleX;
-            const PADDLE_HEIGHT = 100 * scaleY;
-            const BALL_RADIUS = 10 * Math.min(scaleX, scaleY);
+            if (!gameState.ball) {
+                requestAnimationFrame(drawGame);
+                return;
+            }
 
-            // Draw paddles with clean rectangles
-            ctx.fillStyle = '#FFFFFF';
-            // Left paddle
-            ctx.fillRect(0, gameState.player_paddle.y * scaleY, PADDLE_WIDTH, PADDLE_HEIGHT);
-            // Right paddle  
-            ctx.fillRect(canvas.width - PADDLE_WIDTH, gameState.ai_paddle.y * scaleY, PADDLE_WIDTH, PADDLE_HEIGHT);
+            // Calculate responsive sizes - match backend dimensions
+            const paddleWidth = canvas.width * 0.03;  // 3% of screen width
+            const paddleHeight = canvas.height * 0.15; // 15% of screen height
+            const ballRadius = Math.min(canvas.width, canvas.height) * 0.015;
 
-            // Draw ball as clean circle
             ctx.fillStyle = '#FFFFFF';
+
+            // Draw left paddle (AI) - positioned at left edge
+            ctx.fillRect(0, toScreenY(gameState.left_paddle.y), paddleWidth, paddleHeight);
+
+            // Draw right paddle (Player) - positioned at right edge
+            ctx.fillRect(canvas.width - paddleWidth, toScreenY(gameState.right_paddle.y), paddleWidth, paddleHeight);
+
+            // Draw ball
             ctx.beginPath();
-            ctx.arc(gameState.ball.x * scaleX, gameState.ball.y * scaleY, BALL_RADIUS, 0, Math.PI * 2);
+            ctx.arc(toScreenX(gameState.ball.x), toScreenY(gameState.ball.y), ballRadius, 0, Math.PI * 2);
             ctx.fill();
 
-            // Update scores with clean display
-            leftScoreSpan.textContent = gameState.player_score;
-            rightScoreSpan.textContent = gameState.ai_score;
+            requestAnimationFrame(drawGame);
+        }
 
-            // Handle game states
+        function updateUI() {
+            leftScore.textContent = gameState.left_score || 0;
+            rightScore.textContent = gameState.right_score || 0;
+
             if (gameState.game_over) {
-                gameOverMessage.style.display = 'block';
-                if (gameState.player_score >= 5) {
-                    gameOverMessage.textContent = "LEFT WINS";
-                } else {
-                    gameOverMessage.textContent = "RIGHT WINS";
-                }
-                startButton.textContent = "PLAY AGAIN";
-                startButton.style.display = 'block';
+                gameOverPanel.style.display = 'block';
+                startButton.style.display = 'none';
+                winnerText.textContent = (gameState.left_score >= 5) ? 'AI WINS!' : 'PLAYER WINS!';
             } else if (!gameState.game_started) {
-                gameOverMessage.style.display = 'none';
+                gameOverPanel.style.display = 'none';
                 startButton.style.display = 'block';
-                startButton.textContent = "START GAME";
             } else {
-                gameOverMessage.style.display = 'none';
+                gameOverPanel.style.display = 'none';
                 startButton.style.display = 'none';
             }
         }
 
+        // Socket events - smooth 60fps updates
+        let lastStateUpdate = 0;
         socket.on('game_state', (data) => {
-            gameState = data;
+            const now = Date.now();
+            if (now - lastStateUpdate > 16) { // ~60fps update limit for smooth gameplay
+                gameState = data;
+                updateUI();
+                lastStateUpdate = now;
+            }
         });
 
-        socket.on('connect', () => {
-            console.log('Connected to server');
-        });
-
+        // Controls
         startButton.addEventListener('click', () => {
             socket.emit('start_game');
         });
 
-        function gameLoop() {
-            drawGame();
-            requestAnimationFrame(gameLoop);
-        }
+        restartButton.addEventListener('click', () => {
+            socket.emit('start_game');
+        });
 
-        // Initial draw
-        gameLoop();
+        // Improved keyboard controls with continuous movement
+        let keys = {};
+        let moveInterval = null;
+        
+        function startMovement() {
+            if (moveInterval) return; // Already moving
+            
+            moveInterval = setInterval(() => {
+                if (keys['ArrowUp'] || keys['KeyW']) {
+                    socket.emit('move_paddle', { direction: 'up' });
+                } else if (keys['ArrowDown'] || keys['KeyS']) {
+                    socket.emit('move_paddle', { direction: 'down' });
+                } else {
+                    // No keys pressed, stop movement
+                    clearInterval(moveInterval);
+                    moveInterval = null;
+                }
+            }, 16); // Smooth 60fps movement updates
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            if (keys[e.code]) return; // Key already pressed
+            
+            keys[e.code] = true;
+            
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+                startMovement();
+                e.preventDefault();
+            } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                startMovement();
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // Enhanced touch controls for mobile
+        let touchStartY = 0;
+        let lastTouchTime = 0;
+        let touchMoveInterval = null;
+        let currentTouchDirection = null;
+        
+        function startTouchMovement(direction) {
+            currentTouchDirection = direction;
+            
+            if (touchMoveInterval) return; // Already moving
+            
+            touchMoveInterval = setInterval(() => {
+                if (currentTouchDirection) {
+                    socket.emit('move_paddle', { direction: currentTouchDirection });
+                }
+            }, 16); // Smooth 60fps movement updates
+        }
+        
+        function stopTouchMovement() {
+            currentTouchDirection = null;
+            if (touchMoveInterval) {
+                clearInterval(touchMoveInterval);
+                touchMoveInterval = null;
+            }
+        }
+        
+        canvas.addEventListener('touchstart', (e) => {
+            touchStartY = e.touches[0].clientY;
+            e.preventDefault();
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            const now = Date.now();
+            if (now - lastTouchTime < 50) return; // Smooth throttling
+            
+            const touchY = e.touches[0].clientY;
+            const diff = touchStartY - touchY;
+            
+            if (Math.abs(diff) > 15) { // Reasonable threshold for sensitivity
+                if (diff > 0) {
+                    startTouchMovement('up');
+                } else {
+                    startTouchMovement('down');
+                }
+                lastTouchTime = now;
+            }
+            e.preventDefault();
+        });
+        
+        canvas.addEventListener('touchend', (e) => {
+            stopTouchMovement();
+            e.preventDefault();
+        });
+        
+        canvas.addEventListener('touchcancel', (e) => {
+            stopTouchMovement();
+            e.preventDefault();
+        });
+        
+        // Mouse controls for desktop (click and drag)
+        let mouseDown = false;
+        let lastMouseY = 0;
+        
+        canvas.addEventListener('mousedown', (e) => {
+            mouseDown = true;
+            lastMouseY = e.clientY;
+            e.preventDefault();
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!mouseDown) return;
+            
+            const diff = lastMouseY - e.clientY;
+            
+            if (Math.abs(diff) > 5) {
+                if (diff > 0) {
+                    socket.emit('move_paddle', { direction: 'up' });
+                } else {
+                    socket.emit('move_paddle', { direction: 'down' });
+                }
+                lastMouseY = e.clientY;
+            }
+            e.preventDefault();
+        });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            mouseDown = false;
+            e.preventDefault();
+        });
+        
+        canvas.addEventListener('mouseleave', (e) => {
+            mouseDown = false;
+        });
+
+        // Start the game loop
+        requestAnimationFrame(drawGame);
     </script>
 </body>
 </html>
