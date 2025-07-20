@@ -4,12 +4,12 @@ An exciting AI vs AI Pong game built with Python (Flask + SocketIO) for the back
 
 ## Features
 
-- 🤖 Two AI players competing against each other
-- 🎮 Real-time game updates via WebSocket
-- 🎨 Beautiful gradient UI with glowing effects
-- 📱 Responsive design for different screen sizes
-- ⚡ 50 FPS smooth gameplay
-- 🏆 First to 5 points wins
+- Two AI players competing against each other
+- Real-time game updates via WebSocket
+- Beautiful gradient UI with glowing effects
+- Responsive design for different screen sizes
+- 50 FPS smooth gameplay
+- First to 5 points wins
 
 ## Project Structure
 

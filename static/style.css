@@ -45,6 +45,38 @@ body {
     min-width: 100px;
 }
 
+.creator-credit {
+    position: absolute;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #FFFFFF;
+    font-size: 14px;
+    font-family: 'Arial', sans-serif;
+    text-align: center;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.creator-credit .profile-pic {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid #FFFFFF;
+}
+
+.creator-credit a {
+    color: #FFFFFF;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.creator-credit a:hover {
+    text-decoration: underline;
+}
+
 .start-button {
     position: absolute;
     top: 50%;
